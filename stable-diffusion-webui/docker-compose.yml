@@ -1,0 +1,125 @@
+version: '3.9'
+
+x-base_service: &base_service
+    ports:
+      - "7860:7860"
+    volumes:
+      - &v1 ./data:/data
+      - &v2 ./output:/output
+    stop_signal: SIGINT
+    deploy:
+      resources:
+        reservations:
+          devices:
+              - driver: nvidia
+                device_ids: ['0']
+                capabilities: [gpu]
+
+x-base_service-offline: &base_service_offline
+    ports:
+      - "7860:7860"
+    volumes:
+#      - &v1 ./data:/data
+      - &v2 ./output:/output
+    stop_signal: SIGINT
+    deploy:
+      resources:
+        reservations:
+          devices:
+              - driver: nvidia
+                device_ids: ['0']
+                capabilities: [gpu]
+
+
+name: webui-docker
+
+services:
+  download:
+    build: ./services/download/
+    profiles: ["download"]
+    volumes:
+      - *v1
+
+  auto: &automatic
+    <<: *base_service
+    profiles: ["auto"]
+    build: ./services/AUTOMATIC1111
+    image: qingfengfeng/sd-auto:49
+    environment:
+      - CLI_ARGS=--allow-code --medvram --xformers --enable-insecure-extension-access --api
+
+  auto-offline: &automatic-offline
+    <<: *base_service_offline
+    profiles: ["auto-offline"]
+    build:
+      context: .
+      dockerfile: ./services/AUTOMATIC1111/Dockerfile-offline
+    image: qingfengfeng/sd-auto-offline:49
+    environment:
+      - CLI_ARGS=--allow-code --medvram --xformers --enable-insecure-extension-access --api
+
+  auto-cpu:
+    <<: *automatic
+    profiles: ["auto-cpu"]
+    deploy: {}
+    environment:
+      - CLI_ARGS=--no-half --precision full --allow-code --enable-insecure-extension-access --api
+
+  auto-cpu-offline:
+    <<: *automatic-offline
+    profiles: ["auto-cpu-offline"]
+    deploy: {}
+    environment:
+      - CLI_ARGS=--no-half --precision full --allow-code --enable-insecure-extension-access --api
+
+  invoke:
+    <<: *base_service
+    profiles: ["invoke"]
+    build: ./services/invoke/
+    image: qingfengfeng/sd-invoke:26
+    environment:
+      - PRELOAD=true
+      - CLI_ARGS=
+
+  invoke-offline:
+    <<: *base_service_offline
+    profiles: ["invoke-offline"]
+    build:
+      context: .
+      dockerfile: ./services/invoke/Dockerfile-offline
+    image: qingfengfeng/sd-invoke-offline:26
+    environment:
+      - PRELOAD=true
+      - CLI_ARGS=
+
+  sygil: &sygil
+    <<: *base_service
+    profiles: ["sygil"]
+    build: ./services/sygil/
+    image: qingfengfeng/sd-sygil:16
+    environment:
+      - CLI_ARGS=--optimized-turbo
+      - USE_STREAMLIT=0
+
+  sygil-offline: &sygil_offline
+    <<: *base_service_offline
+    profiles: ["sygil-offline"]
+    build: 
+      context: .
+      dockerfile: ./services/sygil/Dockerfile-offline
+    image: qingfengfeng/sd-sygil-offline:16
+    environment:
+      - CLI_ARGS=--optimized-turbo
+      - USE_STREAMLIT=0
+
+  sygil-sl:
+    <<: *sygil
+    profiles: ["sygil-sl"]
+    environment:
+      - USE_STREAMLIT=1
+
+  sygil-sl-offline:
+    <<: *sygil_offline
+    profiles: ["sygil-sl-offline"]
+    environment:
+      - USE_STREAMLIT=1
